@@ -6,50 +6,38 @@
 -- ============================================================================
 
 CREATE OR REPLACE FUNCTION dwiltse.query_optimization.identify_worst_queries(
-  hours_back INT COMMENT 'Hours to look back for query analysis',
-  query_limit INT DEFAULT 10 COMMENT 'Maximum number of worst queries to return'
+  hours_back INT,
+  query_limit INT
 )
 RETURNS TABLE(
-  query_rank STRING COMMENT 'Query ranking (#1, #2, etc.)',
-  query_id STRING COMMENT 'Unique query identifier',
-  workspace_id BIGINT COMMENT 'Workspace identifier',
-  statement_preview STRING COMMENT 'Truncated query text preview',
-  executed_by STRING COMMENT 'User who executed the query',
-  
-  -- Performance Metrics
-  duration_seconds DOUBLE COMMENT 'Total query duration in seconds',
-  execution_seconds DOUBLE COMMENT 'Actual execution time in seconds', 
-  queue_seconds DOUBLE COMMENT 'Time spent waiting for compute',
-  data_read_gb DOUBLE COMMENT 'Gigabytes of data read',
-  rows_processed BIGINT COMMENT 'Total rows processed',
-  
-  -- Cost Metrics (Real billing data)
-  actual_cost_usd DOUBLE COMMENT 'Actual cost from billing system',
-  dbu_consumed DOUBLE COMMENT 'Actual DBUs consumed',
-  cost_per_minute DOUBLE COMMENT 'Cost efficiency: USD per minute',
-  cost_per_gb DOUBLE COMMENT 'Data efficiency: USD per GB processed',
-  
-  -- Performance Scores
-  performance_impact_score DOUBLE COMMENT 'Overall performance impact (0-100)',
-  execution_score DOUBLE COMMENT 'Execution efficiency score (0-25)',
-  resource_score DOUBLE COMMENT 'Resource efficiency score (0-30)', 
-  data_access_score DOUBLE COMMENT 'Data access efficiency score (0-25)',
-  pattern_score DOUBLE COMMENT 'Anti-pattern penalty score (0-20)',
-  priority_score DOUBLE COMMENT 'Cost-weighted priority score',
-  
-  -- Optimization Guidance
-  optimization_category STRING COMMENT 'Primary optimization category',
-  optimization_recommendation STRING COMMENT 'Specific actionable recommendation',
-  estimated_savings_percentage INT COMMENT 'Potential performance improvement %',
-  implementation_effort STRING COMMENT 'Low/Medium/High implementation effort',
-  
-  -- Context
-  warehouse_id STRING COMMENT 'SQL warehouse used',
-  end_time TIMESTAMP COMMENT 'Query completion time'
+  query_rank STRING,
+  query_id STRING,
+  workspace_id BIGINT,
+  statement_preview STRING,
+  executed_by STRING,
+  duration_seconds DOUBLE,
+  execution_seconds DOUBLE,
+  queue_seconds DOUBLE,
+  data_read_gb DOUBLE,
+  rows_processed BIGINT,
+  actual_cost_usd DOUBLE,
+  dbu_consumed DOUBLE,
+  cost_per_minute DOUBLE,
+  cost_per_gb DOUBLE,
+  performance_impact_score DOUBLE,
+  execution_score DOUBLE,
+  resource_score DOUBLE,
+  data_access_score DOUBLE,
+  pattern_score DOUBLE,
+  priority_score DOUBLE,
+  optimization_category STRING,
+  optimization_recommendation STRING,
+  estimated_savings_percentage INT,
+  implementation_effort STRING,
+  warehouse_id STRING,
+  end_time TIMESTAMP
 )
-COMMENT 'Identifies worst performing queries using enhanced algorithm with real cost data and Databricks-specific performance metrics'
-
-AS
+RETURN
 
 WITH query_costs AS (
   SELECT 
