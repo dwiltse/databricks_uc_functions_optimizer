@@ -8,9 +8,9 @@
 -- Base view with smart scoring algorithm
 CREATE OR REPLACE VIEW dwiltse.query_optimization.query_performance_base AS
 SELECT 
-  query_id,
+  statement_id AS query_id,
   workspace_id,
-  created_time,
+  start_time,
   end_time,
   execution_duration_ms,
   read_bytes,
@@ -21,7 +21,7 @@ SELECT
   waiting_for_compute_duration_ms,
   executed_by_user_id,
   compute.warehouse_id,
-  query_text,
+  statement_text,
   
   -- Smart badness scoring calculation
   (
@@ -109,7 +109,7 @@ WHERE execution_status = 'FINISHED'
 CREATE OR REPLACE VIEW dwiltse.query_optimization.worst_queries_2h AS
 SELECT 
   ROW_NUMBER() OVER (ORDER BY badness_score DESC) AS query_rank,
-  query_id,
+  statement_id AS query_id,
   badness_score,
   primary_issue,
   duration_seconds,
@@ -118,10 +118,10 @@ SELECT
   data_read_gb,
   executed_by_user_id AS executed_by,
   warehouse_id,
-  LEFT(query_text, 200) AS statement_preview,
+  LEFT(statement_text, 200) AS statement_preview,
   end_time
 FROM dwiltse.query_optimization.query_performance_base
-WHERE created_time >= CURRENT_TIMESTAMP - INTERVAL 2 HOUR
+WHERE start_time >= CURRENT_TIMESTAMP - INTERVAL 2 HOUR
   AND badness_score > 10.0
 ORDER BY badness_score DESC
 LIMIT 10;
@@ -130,7 +130,7 @@ LIMIT 10;
 CREATE OR REPLACE VIEW dwiltse.query_optimization.worst_queries_24h AS
 SELECT 
   ROW_NUMBER() OVER (ORDER BY badness_score DESC) AS query_rank,
-  query_id,
+  statement_id AS query_id,
   badness_score,
   primary_issue,
   duration_seconds,
@@ -139,10 +139,10 @@ SELECT
   data_read_gb,
   executed_by_user_id AS executed_by,
   warehouse_id,
-  LEFT(query_text, 200) AS statement_preview,
+  LEFT(statement_text, 200) AS statement_preview,
   end_time
 FROM dwiltse.query_optimization.query_performance_base
-WHERE created_time >= CURRENT_TIMESTAMP - INTERVAL 24 HOUR
+WHERE start_time >= CURRENT_TIMESTAMP - INTERVAL 24 HOUR
   AND badness_score > 10.0
 ORDER BY badness_score DESC
 LIMIT 20;
@@ -151,7 +151,7 @@ LIMIT 20;
 CREATE OR REPLACE VIEW dwiltse.query_optimization.worst_queries_week AS
 SELECT 
   ROW_NUMBER() OVER (ORDER BY badness_score DESC) AS query_rank,
-  query_id,
+  statement_id AS query_id,
   badness_score,
   primary_issue,
   duration_seconds,
@@ -160,11 +160,11 @@ SELECT
   data_read_gb,
   executed_by_user_id AS executed_by,
   warehouse_id,
-  LEFT(query_text, 200) AS statement_preview,
+  LEFT(statement_text, 200) AS statement_preview,
   end_time,
-  DATE(created_time) AS query_date
+  DATE(start_time) AS query_date
 FROM dwiltse.query_optimization.query_performance_base
-WHERE created_time >= CURRENT_TIMESTAMP - INTERVAL 7 DAY
+WHERE start_time >= CURRENT_TIMESTAMP - INTERVAL 7 DAY
   AND badness_score > 10.0
 ORDER BY badness_score DESC
 LIMIT 50;
@@ -173,7 +173,7 @@ LIMIT 50;
 CREATE OR REPLACE VIEW dwiltse.query_optimization.critical_queries AS
 SELECT 
   ROW_NUMBER() OVER (ORDER BY badness_score DESC) AS query_rank,
-  query_id,
+  statement_id AS query_id,
   badness_score,
   primary_issue,
   duration_seconds,
@@ -182,10 +182,10 @@ SELECT
   data_read_gb,
   executed_by_user_id AS executed_by,
   warehouse_id,
-  LEFT(query_text, 200) AS statement_preview,
+  LEFT(statement_text, 200) AS statement_preview,
   end_time
 FROM dwiltse.query_optimization.query_performance_base
-WHERE created_time >= CURRENT_TIMESTAMP - INTERVAL 24 HOUR
+WHERE start_time >= CURRENT_TIMESTAMP - INTERVAL 24 HOUR
   AND (
     primary_issue = 'MEMORY_SPILL_CRITICAL' OR
     primary_issue = 'EXECUTION_TOO_SLOW' OR
@@ -210,6 +210,6 @@ ORDER BY badness_score DESC;
 --
 -- Custom time window using base view:
 -- SELECT * FROM dwiltse.query_optimization.query_performance_base 
--- WHERE created_time >= '2025-01-20' AND badness_score > 15
+-- WHERE start_time >= '2025-01-20' AND badness_score > 15
 -- ORDER BY badness_score DESC;
 -- ============================================================================
