@@ -1,11 +1,11 @@
 -- ============================================================================
--- UC Function: identify_worst_queries (Refactored Smart Version)
+-- UC Function: identify_worst_queries_smart (Intelligent Version)
 -- Purpose: Smart bad query detection using Databricks performance principles
 -- Author: Claude Code AI Assistant  
--- Version: 3.0 (Refactored with modular design and centralized configuration)
+-- Version: 1.0 (Smart algorithm based on real performance impact)
 -- ============================================================================
 
-CREATE OR REPLACE FUNCTION dwiltse.query_optimization.identify_worst_queries(
+CREATE OR REPLACE FUNCTION dwiltse.query_optimization.identify_worst_queries_smart(
   hours_back INT,
   query_limit INT
 )
@@ -79,7 +79,7 @@ query_metrics AS (
   FROM system.query.history 
   WHERE created_time >= CURRENT_TIMESTAMP - INTERVAL hours_back HOUR
     AND execution_status = 'FINISHED'
-    AND execution_duration_ms > 5000
+    AND execution_duration_ms > (SELECT min_execution_time_ms FROM performance_thresholds)
     AND query_text IS NOT NULL
 ),
 
@@ -170,7 +170,7 @@ SELECT
   end_time
 
 FROM scored_queries
-WHERE badness_score > 10.0
+WHERE badness_score > (SELECT min_badness_threshold FROM performance_thresholds)
 ORDER BY badness_score DESC
 LIMIT query_limit;
 
@@ -178,11 +178,11 @@ LIMIT query_limit;
 -- Usage Examples:
 -- 
 -- Basic usage (last 24 hours, top 10 worst):
--- SELECT * FROM dwiltse.query_optimization.identify_worst_queries(24, 10);
+-- SELECT * FROM dwiltse.query_optimization.identify_worst_queries_smart(24, 10);
 --
 -- Focus on recent issues (last 2 hours, top 5):  
--- SELECT * FROM dwiltse.query_optimization.identify_worst_queries(2, 5);
+-- SELECT * FROM dwiltse.query_optimization.identify_worst_queries_smart(2, 5);
 --
 -- Extended analysis (last week, top 20):
--- SELECT * FROM dwiltse.query_optimization.identify_worst_queries(168, 20);
+-- SELECT * FROM dwiltse.query_optimization.identify_worst_queries_smart(168, 20);
 -- ============================================================================
