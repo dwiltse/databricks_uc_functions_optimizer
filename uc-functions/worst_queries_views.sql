@@ -99,7 +99,7 @@ SELECT
 FROM system.query.history 
 WHERE execution_status = 'FINISHED'
   AND execution_duration_ms > 5000 -- Skip very fast queries
-  AND query_text IS NOT NULL;
+  AND statement_text IS NOT NULL;
 
 -- ============================================================================
 -- Specific Time-Window Views
@@ -109,7 +109,7 @@ WHERE execution_status = 'FINISHED'
 CREATE OR REPLACE VIEW dwiltse.query_optimization.worst_queries_2h AS
 SELECT 
   ROW_NUMBER() OVER (ORDER BY badness_score DESC) AS query_rank,
-  statement_id AS query_id,
+  query_id,
   badness_score,
   primary_issue,
   duration_seconds,
@@ -130,7 +130,7 @@ LIMIT 10;
 CREATE OR REPLACE VIEW dwiltse.query_optimization.worst_queries_24h AS
 SELECT 
   ROW_NUMBER() OVER (ORDER BY badness_score DESC) AS query_rank,
-  statement_id AS query_id,
+  query_id,
   badness_score,
   primary_issue,
   duration_seconds,
@@ -151,7 +151,7 @@ LIMIT 20;
 CREATE OR REPLACE VIEW dwiltse.query_optimization.worst_queries_week AS
 SELECT 
   ROW_NUMBER() OVER (ORDER BY badness_score DESC) AS query_rank,
-  statement_id AS query_id,
+  query_id,
   badness_score,
   primary_issue,
   duration_seconds,
@@ -173,7 +173,7 @@ LIMIT 50;
 CREATE OR REPLACE VIEW dwiltse.query_optimization.critical_queries AS
 SELECT 
   ROW_NUMBER() OVER (ORDER BY badness_score DESC) AS query_rank,
-  statement_id AS query_id,
+  query_id,
   badness_score,
   primary_issue,
   duration_seconds,
