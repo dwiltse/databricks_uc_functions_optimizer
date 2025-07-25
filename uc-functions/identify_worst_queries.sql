@@ -5,7 +5,7 @@
 -- Version: 2.0 (Enhanced with proper cost calculation and Databricks-specific metrics)
 -- ============================================================================
 
-CREATE OR REPLACE FUNCTION mcp.query_optimization.identify_worst_queries(
+CREATE OR REPLACE FUNCTION dwiltse.query_optimization.identify_worst_queries(
   hours_back INT COMMENT 'Hours to look back for query analysis',
   query_limit INT DEFAULT 10 COMMENT 'Maximum number of worst queries to return'
 )
