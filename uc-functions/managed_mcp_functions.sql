@@ -52,7 +52,7 @@ RETURN (
     END
   FROM (
     SELECT 
-      ROW_NUMBER() OVER (ORDER BY badness_score DESC) AS query_rank,
+      query_rank,
       query_id,
       badness_score,
       primary_issue,
@@ -60,15 +60,29 @@ RETURN (
       spill_gb,
       cache_hit_percent,
       data_read_gb,
-      executed_by_user_id AS executed_by,
+      executed_by,
       warehouse_id,
-      LEFT(statement_text, 200) AS statement_preview,
+      statement_preview,
       end_time
-    FROM dwiltse.query_optimization.query_performance_base
-    WHERE start_time >= DATEADD(HOUR, -hours_back, CURRENT_TIMESTAMP())
-      AND badness_score > 10.0
-    ORDER BY badness_score DESC
-    LIMIT query_limit
+    FROM (
+      SELECT 
+        ROW_NUMBER() OVER (ORDER BY badness_score DESC) AS query_rank,
+        query_id,
+        badness_score,
+        primary_issue,
+        duration_seconds,
+        spill_gb,
+        cache_hit_percent,
+        data_read_gb,
+        executed_by_user_id AS executed_by,
+        warehouse_id,
+        LEFT(statement_text, 200) AS statement_preview,
+        end_time
+      FROM dwiltse.query_optimization.query_performance_base
+      WHERE start_time >= DATEADD(HOUR, -hours_back, CURRENT_TIMESTAMP())
+        AND badness_score > 10.0
+    ) ranked_all
+    WHERE query_rank <= query_limit
   ) ranked_queries
 );
 
