@@ -77,10 +77,10 @@ query_metrics AS (
     COALESCE(waiting_for_compute_duration_ms, 0) AS queue_time_ms
     
   FROM system.query.history 
-  WHERE created_time >= CURRENT_TIMESTAMP - INTERVAL hours_back HOUR
+  WHERE start_time >= CURRENT_TIMESTAMP - INTERVAL hours_back HOUR
     AND execution_status = 'FINISHED'
     AND execution_duration_ms > (SELECT min_execution_time_ms FROM performance_thresholds)
-    AND query_text IS NOT NULL
+    AND statement_text IS NOT NULL
 ),
 
 scored_queries AS (
@@ -166,7 +166,7 @@ SELECT
   data_read_gb,
   executed_by_user_id AS executed_by,
   compute.warehouse_id,
-  LEFT(query_text, 200) AS statement_preview,
+  LEFT(statement_text, 200) AS statement_preview,
   end_time
 
 FROM scored_queries

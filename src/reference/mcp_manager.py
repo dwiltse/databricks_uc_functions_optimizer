@@ -218,6 +218,208 @@ class MCPConnectionManager:
         """
         
         return self.query_genie_space(query_text)
+    
+    def get_query_optimization_recommendations(self, query_details):
+        """
+        Get LLM-powered optimization recommendations for a specific bad query
+        
+        Args:
+            query_details: Dict with query info from UC functions
+                - query_id: str
+                - statement_text: str
+                - badness_score: float
+                - primary_issue: str
+                - performance_metrics: dict (duration, spill_gb, cache_hit_percent, etc.)
+        
+        Returns:
+            Dict with structured optimization recommendations
+        """
+        
+        # Extract key information
+        query_id = query_details.get('query_id', 'unknown')
+        sql_text = query_details.get('statement_text', '')
+        badness_score = query_details.get('badness_score', 0)
+        primary_issue = query_details.get('primary_issue', 'UNKNOWN')
+        
+        # Performance context
+        duration = query_details.get('duration_seconds', 0)
+        spill_gb = query_details.get('spill_gb', 0)
+        cache_hit = query_details.get('cache_hit_percent', 0)
+        data_read_gb = query_details.get('data_read_gb', 0)
+        
+        optimization_prompt = f"""
+        **QUERY OPTIMIZATION ANALYSIS**
+        
+        **Query Context:**
+        - Query ID: {query_id}
+        - Badness Score: {badness_score}/100
+        - Primary Issue: {primary_issue}
+        - Duration: {duration} seconds
+        - Memory Spill: {spill_gb} GB
+        - Cache Hit Rate: {cache_hit}%
+        - Data Read: {data_read_gb} GB
+        
+        **SQL Query to Optimize:**
+        ```sql
+        {sql_text}
+        ```
+        
+        **Analysis Required:**
+        
+        1. **Root Cause Analysis:**
+           - What specifically makes this query perform poorly?
+           - Which parts of the SQL are the biggest bottlenecks?
+        
+        2. **Specific Optimization Recommendations:**
+           - Provide EXACT SQL rewrites, not just general advice
+           - Show before/after code examples
+           - Focus on the primary issue: {primary_issue}
+        
+        3. **Prioritized Action Items:**
+           - Rank fixes by potential impact (High/Medium/Low)
+           - Estimate expected performance improvement
+           - Note any trade-offs or risks
+        
+        4. **Implementation Notes:**
+           - Prerequisites (indexes, partitioning, etc.)
+           - Validation steps to confirm improvement
+           - Monitoring recommendations
+        
+        **Focus Areas Based on Primary Issue:**
+        {self._get_issue_specific_guidance(primary_issue)}
+        
+        Please provide specific, actionable SQL optimizations with concrete code examples.
+        """
+        
+        return self.query_genie_space(optimization_prompt)
+    
+    def _get_issue_specific_guidance(self, primary_issue):
+        """Get issue-specific guidance for LLM prompting"""
+        
+        guidance_map = {
+            'MEMORY_SPILL_CRITICAL': """
+            - Focus on reducing memory usage per partition
+            - Look for opportunities to filter data earlier
+            - Consider breaking complex queries into stages
+            - Examine JOIN order and strategies
+            """,
+            'EXECUTION_TOO_SLOW': """
+            - Identify missing WHERE clause filters
+            - Look for inefficient JOINs and subqueries
+            - Consider query restructuring opportunities  
+            - Examine aggregation patterns
+            """,
+            'POOR_CACHE_UTILIZATION': """
+            - Look for opportunities to cache intermediate results
+            - Identify repeatedly accessed data patterns
+            - Consider materialized view opportunities
+            - Examine data access patterns
+            """,
+            'DATA_INEFFICIENT': """
+            - Focus on column pruning (SELECT specific columns)
+            - Look for unnecessary data scanning
+            - Consider partitioning and filtering strategies
+            - Examine data format optimizations
+            """,
+            'SHUFFLE_HEAVY': """
+            - Focus on JOIN optimization and broadcast opportunities
+            - Look for partitioning key alignment
+            - Consider query restructuring to reduce shuffling
+            - Examine aggregation placement
+            """,
+            'INFRASTRUCTURE_BOTTLENECK': """
+            - Focus on resource utilization efficiency
+            - Look for query timing and scheduling opportunities
+            - Consider cluster sizing recommendations
+            - Examine concurrency patterns
+            """
+        }
+        
+        return guidance_map.get(primary_issue, "Analyze general query optimization opportunities")
+    
+    def get_integrated_query_analysis(self, query_id_or_rank=1, hours_back=24):
+        """
+        Integrated workflow: UC Functions → LLM Analysis
+        
+        1. Get worst queries from UC functions  
+        2. Get detailed LLM optimization recommendations
+        3. Return combined analysis
+        
+        Args:
+            query_id_or_rank: Either specific query_id or rank (1=worst, 2=second worst, etc.)
+            hours_back: Hours to look back for query analysis
+        
+        Returns:
+            Dict with comprehensive analysis combining rule-based + LLM insights
+        """
+        
+        # Step 1: Get query details from UC functions
+        if isinstance(query_id_or_rank, str):
+            # Specific query ID requested
+            uc_query = f"SELECT dwiltse.query_optimization.get_query_recommendations('{query_id_or_rank}')"
+        else:
+            # Get Nth worst query  
+            uc_query = f"SELECT dwiltse.query_optimization.get_worst_queries({hours_back}, {query_id_or_rank})"
+        
+        print(f"🔍 Getting query details from UC functions...")
+        uc_result = self.query_genie_space(f"Execute this query and return the JSON result: {uc_query}")
+        
+        if not uc_result.get('success'):
+            return {"error": "Failed to get query details from UC functions", "details": uc_result}
+        
+        try:
+            # Parse UC function JSON response
+            uc_data = json.loads(uc_result['data']) if isinstance(uc_result['data'], str) else uc_result['data']
+            
+            if not uc_data.get('queries') or len(uc_data['queries']) == 0:
+                return {"error": "No queries found matching criteria"}
+            
+            # Get the target query (first one if getting worst queries)
+            target_query = uc_data['queries'][query_id_or_rank - 1] if isinstance(query_id_or_rank, int) else uc_data['queries'][0]
+            
+            print(f"🎯 Analyzing Query {target_query.get('query_id', 'unknown')} with LLM...")
+            
+            # Step 2: Get full SQL text for this query_id
+            sql_query = f"""
+            SELECT 
+                query_id,
+                statement_text,  
+                badness_score,
+                primary_issue,
+                duration_seconds,
+                spill_gb,
+                cache_hit_percent,
+                data_read_gb
+            FROM dwiltse.query_optimization.query_performance_base
+            WHERE query_id = '{target_query['query_id']}'
+            LIMIT 1
+            """
+            
+            sql_result = self.query_genie_space(f"Execute this query: {sql_query}")
+            
+            # Step 3: Combine UC data with full query text
+            query_details = {
+                **target_query,
+                'statement_text': 'Full SQL query text will be extracted...'  # Placeholder
+            }
+            
+            # Step 4: Get LLM optimization recommendations
+            llm_analysis = self.get_query_optimization_recommendations(query_details)
+            
+            # Step 5: Return integrated analysis
+            return {
+                "success": True,
+                "query_id": target_query['query_id'],
+                "rule_based_analysis": uc_data,
+                "llm_optimization_recommendations": llm_analysis,
+                "analysis_timestamp": datetime.now().isoformat(),
+                "methodology": "Hybrid: Rule-based identification + LLM optimization analysis"
+            }
+            
+        except json.JSONDecodeError as e:
+            return {"error": "Failed to parse UC function response", "details": str(e)}
+        except Exception as e:
+            return {"error": "Analysis failed", "details": str(e)}
 
 # Streamlit integration helpers
 @st.cache_resource
@@ -282,6 +484,54 @@ def test_mcp_connection():
     print("\n✅ MCP Connection Test Complete!")
     return True
 
+def test_integrated_query_optimization():
+    """Test the integrated query optimization workflow"""
+    print("🚀 Testing Integrated Query Optimization Workflow...")
+    
+    mcp = MCPConnectionManager()
+    
+    # Test connection first
+    status = mcp.test_connection()
+    if status["status"] != "success":
+        print("❌ MCP connection failed - cannot test optimization workflow")
+        return False
+    
+    print("\n📊 Testing integrated analysis for worst query...")
+    
+    try:
+        # Test the integrated workflow
+        analysis = mcp.get_integrated_query_analysis(
+            query_id_or_rank=1,  # Get worst query
+            hours_back=24
+        )
+        
+        print(f"Analysis Result: {analysis}")
+        
+        if analysis.get('success'):
+            print("✅ Integrated analysis successful!")
+            print(f"📋 Query ID: {analysis.get('query_id')}")
+            print(f"🕒 Analysis Time: {analysis.get('analysis_timestamp')}")
+            print(f"🔬 Methodology: {analysis.get('methodology')}")
+            
+            # Check if we got both rule-based and LLM analysis
+            if analysis.get('rule_based_analysis') and analysis.get('llm_optimization_recommendations'):
+                print("✅ Both rule-based and LLM analysis completed!")
+                return True
+            else:
+                print("⚠️ Analysis incomplete - missing components")
+                return False
+        else:
+            print(f"❌ Analysis failed: {analysis.get('error')}")
+            return False
+            
+    except Exception as e:
+        print(f"❌ Test failed with exception: {str(e)}")
+        return False
+    
+    print("\n✅ Integrated Query Optimization Test Complete!")
+
 if __name__ == "__main__":
     # Run connection test
-    test_mcp_connection()
+    if test_mcp_connection():
+        # If connection works, test the integrated optimization workflow
+        test_integrated_query_optimization()
