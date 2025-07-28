@@ -18,30 +18,30 @@ COMMENT 'Returns worst performing queries as JSON for managed MCP LLM analysis'
 RETURN (
   SELECT 
     CASE 
-      WHEN COUNT(*) = 0 THEN CONCAT('{"message": "No queries found in last ', hours_back, ' hours", "queries": []}')
+      WHEN COUNT(*) = 0 THEN CONCAT('{"message": "No queries found in last ', CAST(hours_back AS STRING), ' hours", "queries": []}')
       ELSE CONCAT(
-        '{"message": "Found ', COUNT(*), ' worst queries in last ', hours_back, ' hours", "total_analyzed": ', 
-        (SELECT COUNT(*) FROM dwiltse.query_optimization.query_performance_base 
-         WHERE start_time >= CURRENT_TIMESTAMP - INTERVAL hours_back HOUR), 
+        '{"message": "Found ', CAST(COUNT(*) AS STRING), ' worst queries in last ', CAST(hours_back AS STRING), ' hours", "total_analyzed": ', 
+        CAST((SELECT COUNT(*) FROM dwiltse.query_optimization.query_performance_base 
+         WHERE start_time >= CURRENT_TIMESTAMP() - MAKE_INTERVAL(0, 0, 0, 0, hours_back, 0, 0)) AS STRING), 
         ', "queries": [',
-        STRING_AGG(
+        COALESCE(STRING_AGG(
           CONCAT(
-            '{"query_rank": ', query_rank, 
+            '{"query_rank": ', CAST(query_rank AS STRING), 
             ', "query_id": "', query_id, '"',
-            ', "badness_score": ', ROUND(badness_score, 1),
+            ', "badness_score": ', CAST(ROUND(badness_score, 1) AS STRING),
             ', "primary_issue": "', primary_issue, '"',
-            ', "duration_seconds": ', duration_seconds,
-            ', "spill_gb": ', spill_gb,
-            ', "cache_hit_percent": ', cache_hit_percent,
-            ', "data_read_gb": ', data_read_gb,
+            ', "duration_seconds": ', CAST(duration_seconds AS STRING),
+            ', "spill_gb": ', CAST(spill_gb AS STRING),
+            ', "cache_hit_percent": ', CAST(cache_hit_percent AS STRING),
+            ', "data_read_gb": ', CAST(data_read_gb AS STRING),
             ', "executed_by": "', executed_by, '"',
             ', "warehouse_id": "', COALESCE(warehouse_id, 'unknown'), '"',
             ', "statement_preview": "', REPLACE(REPLACE(statement_preview, '"', '\\"'), '\n', '\\n'), '"',
             ', "end_time": "', end_time, '"',
-            ', "hours_ago": ', ROUND(TIMESTAMPDIFF(MINUTE, end_time, CURRENT_TIMESTAMP) / 60.0, 1), '}'
+            ', "hours_ago": ', CAST(ROUND((UNIX_TIMESTAMP(CURRENT_TIMESTAMP()) - UNIX_TIMESTAMP(end_time)) / 3600.0, 1) AS STRING), '}'
           ), 
           ', '
-        ),
+        ), ''),
         ']}'
       )
     END
@@ -60,7 +60,7 @@ RETURN (
       LEFT(statement_text, 200) AS statement_preview,
       end_time
     FROM dwiltse.query_optimization.query_performance_base
-    WHERE start_time >= CURRENT_TIMESTAMP - INTERVAL hours_back HOUR
+    WHERE start_time >= CURRENT_TIMESTAMP() - MAKE_INTERVAL(0, 0, 0, 0, hours_back, 0, 0)
       AND badness_score > 10.0
     ORDER BY badness_score DESC
     LIMIT query_limit
